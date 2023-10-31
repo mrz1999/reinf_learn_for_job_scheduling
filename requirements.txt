@@ -1,0 +1,7 @@
+gymnasium==0.29.1
+ipykernel==6.25.1
+pandas==2.0.3
+sb3-contrib==2.1.0
+stable-baselines3==2.1.0
+tensorboard==2.14.0
+
