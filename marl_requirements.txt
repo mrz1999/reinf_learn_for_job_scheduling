@@ -1,0 +1,36 @@
+# RICORDATI CHE DEVE ESSERE CON PYTHON 3.8 O 3.9 (MEGLIO SE 3.8pi)
+
+dash_bootstrap_components==1.5.0
+setuptools==65.5.0
+# setuptools==65.5.0 "wheel<0.40.0" # per far funzionare la versione di gym 0.21.0
+# enter in MARLlib and install their requirements
+dm-tree==0.1.8
+gym==0.20.0
+gputil==1.4.0
+ipykernel==6.4.1
+matplotlib==3.7.2
+numpy==1.20.3
+pandas==2.0.2
+pettingzoo==1.12.0
+plotly==5.16.1
+protobuf==3.20.0
+ray==1.8.0 #2.6.3
+ray[tune]==1.8.0
+ray[rllib]==1.8.0
+SuperSuit==3.2.0
+# torch==1.9.0
+
+# FOR USING MARLLIB LIBRARY:
+
+# $ conda create -n marllib python=3.8 # or 3.9
+# $ conda activate marllib
+# $ git clone https://github.com/Replicable-MARL/MARLlib.git && cd MARLlib
+# $ pip install -r requirements.txt
+
+# pip install "gym==0.20.0"
+
+# $ cd /Path/To/MARLlib/marllib/patch
+# $ python add_patch.py -y
+
+# $ pip install --upgrade pip
+# $ pip install marllib

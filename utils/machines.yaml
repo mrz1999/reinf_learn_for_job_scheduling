@@ -1,0 +1,12 @@
+# file di configurazione per l'environmnet machines
+env: machines
+  
+env_args:
+  map_name: 'machines'
+  render: False
+  dataset: []
+
+mask_flag: False
+global_state_flag: True
+opp_action_in_cc: False
+# num_gpus: 0

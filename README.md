@@ -22,3 +22,4 @@ Using this branch is a little bit more difficult, is not sufficient installing a
 
 The environment is developed in the file multiagent_env.py. For using he library MARLLIB we need a wrapper of the Environment that in the file env_wrapper.py . 
 For running the algorithm you can use the file train.py.  You can cange the algorithm among 'mappo', 'coma' and 'matrpo' that are the one we tried and secure work. For the ohter algorithms of the library, you should first check if they work. 
+With the fail trian you will create a folder which contains allt he checkpoints and the parameters. Then if you want to otainingg the results you should use the file inference.py which use the function render. There are some problem with rendering.
