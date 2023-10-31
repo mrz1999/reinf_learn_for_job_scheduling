@@ -11,3 +11,10 @@ The file dataset_generator.py can be used for generating a new dataset, you can 
 
 In the file main.py you can change the information about your training: e.g. the number of episodes (pa.timesteps), the settings about the checkpoints.
 The algorithm used in MaskablePPO from stable-baselines3 library.
+
+
+In the branch single_agent it will be presented the same environment of the main but adapted for using one of the algorithm of stabl-baseliens3 without the Mask (the environment in this branch differs from the one of the main for the reward function, it the maskable env I have changed some rewards for adapting the bonus because the maskable env never choose bad action).
+In the branch there are 3 Environments almost egual. The only difference is in the termination criteria. The best Environmnet should be the 3.
+There are 2 different main depending on if using vectorization (for fasting the computation) or not. The main are developped in such a way to testing the Environment eith three algorithms from stable-baseliens3 library: DQN, A2C and PPO.
+
+Finally the other branch is about the multi agent.

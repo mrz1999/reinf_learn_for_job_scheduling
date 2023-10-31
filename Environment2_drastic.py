@@ -65,13 +65,13 @@ class Environment(gym.Env):
     def __init__(self,pa, day_job_jobcode, jobcode_machine_op_t, turn_abilities, j1_j2_m_setup):
         super(Environment, self).__init__()
         '''
-        this function can be used for configuring the environment
+        This function can be used for configuring the environment
         INPUT:
         pa: is a class which contains all the information about the parameters
         day_job_jobcode: is a pandas dataframe of 3 columns: ['Day', 'Job', 'Code']
         jobcode_machine_op_t: pandas dataframe of 4 columns: ['Code', 'Machine', 'Operator','Time']
         turn_abilities: pandas dataframe of 3 columns: ['Operator', 'Turn', 'Machine']
-        j1_j2_m_setup: pandas dataframe of 4 columns: ['Job_from', 'Job_to', 'Machine', 'SetupTime']
+        j1_j2_m_setup: pandas dataframe of 4 columns: ['Job_from', 'Job_to', 'Machine', 'Setuptime']
         '''
 
         #datasets
@@ -80,7 +80,7 @@ class Environment(gym.Env):
         self.turn_abilities = turn_abilities
         self.j1_j2_m_setup = j1_j2_m_setup
 
-        self.jobcode_to_integer() # I add the JobCode column to the jobcode_machine_op_t dataset and I translate the columns job_to and job_from of the j1_j2_m_setup dataset with the JobCode instead of the job given as input.
+        self.jobcode_to_integer() # I add the JobCode column to the jobcode_machine_op_t dataset
 
         tot_days = self.day_job_jobcode['Day'].unique() #this variable is a list of all the day for which I have to schedule jobs
 
@@ -94,20 +94,12 @@ class Environment(gym.Env):
         self.operators_code = list(turn_abilities['Operator'].unique())
 
         # I don't need this assert because it can happen that I have a machine but no job can be done on it, expecially if I use random dataset.
-        # assert(self.pa.num_machine == len(self.machines_code)) # I will check this bcs sometimes I forgot to change the parameter in the parameters class. I have to set this better.
+        # assert(self.pa.num_machine == len(self.machines_code))
 
         # the following three attributes are dictionaries which have as key the identifier of the class and as the value the related class.
-        self.jobs = dict(zip(self.jobs_code, [Job(job_code, jobcode_machine_op_t, j1_j2_m_setup) for job_code in self.jobs_code]))
+        self.jobs = dict(zip(self.jobs_code, [Job(job_code, jobcode_machine_op_t) for job_code in self.jobs_code]))
         self.machines = dict(zip(self.machines_code, [Machine(machine_code, jobcode_machine_op_t, turn_abilities) for machine_code in self.machines_code]))
         self.operators = dict(zip(self.operators_code, [Operator(op_code, turn_abilities) for op_code in self.operators_code]))
-
-        # It can happen that a machine can not execute any job, in this case we will not consider it, so the effective number of machine will be the number of machines that compare in the datasets.
-        self.pa.num_machine = len(self.machines_code)
-
-        # I define the following two variables for having a standard value to use in the observation array when the jobslot is empty
-        self.max_time_job = max(self.jobcode_machine_op_t['Time'])
-        self.max_op_needed = max(self.jobcode_machine_op_t['Operator'])
-        self.max_setup = max(self.j1_j2_m_setup['SetupTime'])
 
         self.job_slot = JobSlot(self.pa)
         self.job_backlog = JobBacklog(self.pa)
@@ -117,9 +109,6 @@ class Environment(gym.Env):
         # Now let's define the state: the state will be modified only when an action is actually performed (in the step function)
         self.state = State(self.jobs, self.machines, self.operators, self.job_slot, self.job_backlog)
         
-        self.no_action = 0
-        self.num_null_slot = 0
-
         self.finish = False # It will be True when the agents terminates the episode
 
         self._setup_space()
@@ -170,8 +159,8 @@ class Environment(gym.Env):
         # - remaining time on that machine (0 if the machine is available)
         # - number of free operator that can work on that machine
         # - total time of all the jobs scheduled on that machine until now (I want omogeneous distribution of jobs so I don't want that a machine has a very long queue while another one is empty. I use this idea also for the reward)
-        # - time of execution of the job (if the job can not be executed on that mchine: maximum time of every job + 1)
-        # - operator needed for execute that job (if the job can not be executed on that mchine: maximum num of operator of every job + 1)
+        # - time of execution of the job (if the job can not be executed on that machine: -9)
+        # - operator needed for execute that job (if the job can not be executed on that machine: -9)
 
         compact_repr = np.zeros((self.pa.num_machine*self.pa.job_slots,5))
         cr_mach = 0 # counts the index of the couple machine-job I'm considering
@@ -186,17 +175,18 @@ class Environment(gym.Env):
                 machine_job = machine_info.copy()
 
                 if job_code == None: # I have no job in that position of the job_slot
-                    compact_repr[cr_mach,:] = machine_job.extend([self.max_time_job+self.max_setup+1,self.max_op_needed+1])
+                    compact_repr[cr_mach,:] = machine_job.extend([-9,-9])
                 else:
                     job = state.jobs[job_code]
 
                     if machine_code in job.suitable_machine: # If I can execute that job on that machine, i put the info of the job
-                        index = np.where(job.suitable_machine == machine_code)[0] # I want the information about that job on that machine (because in al the info of the job I have info about all the machine on which I can perform that job).
+                        index = np.where(job.suitable_machine == machine_code)[0] # I want the information about that job on that machine (because in al the info of the job I have info about all the mahcien on which I can perform that job)
+
                         # Note that the time of the job will be the actual time + the setup time needed
                         machine_job.extend([job.job_time[index][0] + self.get_setup_time(job_code, machine_code), job.operators[index][0]]) 
 
                     else: # if I can not execute that job on that machine, I put default value for the job
-                        machine_job.extend([self.max_time_job+1,self.max_op_needed+1]) 
+                        machine_job.extend([-9, -9]) 
 
                 compact_repr[cr_mach,:] = machine_job
                 cr_mach +=1
@@ -207,7 +197,7 @@ class Environment(gym.Env):
     def dict_indexNN_JobMach(self, state):
         '''It will create a dictionary which has as key the index of the output of the NN and as value the correpondent list [job_code, action_code]'''
 
-        # The output of the NN depends on the observation. So the index job-machine of the output it's in the same order in which compare in the observation.
+        # The output of the NN depends on the observation. So the index job-machine of the output it's in the same order in which compare in the observation
         # -9 is the default job code when the job slot is empty
 
         index_to_couple = {}
@@ -234,13 +224,13 @@ class Environment(gym.Env):
         if len(self.jobs_code) < self.pa.job_slots: # I can put directly all the jobs in the queue
             for idx, code in enumerate(self.jobs_code):
                 self.job_slot.slot[idx] = code 
-        
+
         else:
             queue = random.sample(self.jobs_code, self.pa.job_slots)
             assert(len(queue) == len(self.job_slot.slot))
             self.job_slot.slot = queue
             backlog = [job_code for job_code in self.jobs_code if job_code not in queue]
-            
+
             for idx, code in enumerate(backlog):
                 self.job_backlog.backlog[idx] = code
             self.job_backlog.curr_size = len(backlog)
@@ -266,7 +256,7 @@ class Environment(gym.Env):
                 state.end_backlog = True
 
         return state
-           
+            
     def is_possible_action(self, state, action):
         '''It will return True if the action is possible, False otherwise'''
 
@@ -285,7 +275,7 @@ class Environment(gym.Env):
             return(False)
         else:
             return(True)
-    
+
     def get_setup_time(self, job_to, machine_code) -> int:
         '''It will return the setup time on the input machine when passing from the last scheduled job on it to the one given as input.
 
@@ -299,69 +289,59 @@ class Environment(gym.Env):
         if self.scheduled_action[machine_code] == []:
             return 0 # I have never used the machine for a job so I don't to wait a setup time
         else:
-            job = self.state.jobs[job_to]
+            
             last_job = self.scheduled_action[machine_code][-1]
-
-            setup_time = job.setup_time[machine_code][last_job]
-
+            # print('machine code', machine_code, 'job to', job_to, 'last job', last_job)
+            setup_time = self.j1_j2_m_setup[self.j1_j2_m_setup['Machine']==machine_code] \
+                                            [self.j1_j2_m_setup['Job_from']==last_job] \
+                                            [self.j1_j2_m_setup['Job_to']==job_to]['SetupTime'].values[0]
         return setup_time
 
-    def step(self, action: int):
+    def step(self, action):
         """
         Take an action in the environment and observe the next transition.
 
         Args:
-            action: An indicator of the action to be taken. It is the output of the NN. It indicates an index which thanks to the function nn_to_code will be transformed in a list [job_code, machine_code].
+            action: An indicator of the action to be taken.
 
         Returns:
             The next transition.
         """
-
-        # action_nn = action # this is the integer returned as output from the NN
+        
         if action == self.pa.num_machine*self.pa.job_slots: #no action
-
-            self.num_null_slot = 0
-            # I  update the value for self.no_action in the function
-            return(self.no_action_step())
+            return self.no_action_step()
             
         else:
-            self.no_action = 0 # if it is not the null action, I reset the counter of the consecutive no action
             action = self.nn_to_code(action)
             job_code, machine_code = action
             # print('code of the job to execute',job_code)
             # print('job slot: ', self.state.job_slot.slot)
 
-            if job_code == -9: # I have selected no job (don't do any action)
-
-                # print('STAI PRENDENDO UN JOB SLOT NULLO. MANNAGGIA LA MARINA!!')
-                # print('action mask: {}, action selected: {}'.format(self.action_masks(), action_nn))
-                self.num_null_slot += 1
-                return(self.no_job_action())
+            if job_code == -9: # I have selected no job so it's like don't do any action
+                return self.no_job_action()
             else:
-                self.num_null_slot = 0
                 is_possible = self.is_possible_action(self.state, action) #this will be true if the action is possible
 
                 info = {}
                 reward = self.get_reward(self.state, action)
 
                 if is_possible: 
-                    # print("STA FACENDO L'AZIONE {}".format(action))
+
                     self.state = self._get_next_state(self.state, action)
                     self.update_time(pass_time = False)
-
+                    done = self.finish
                     # Update the list of the action scheduled on that machine
                     self.scheduled_action[machine_code].append(job_code)
                 else:
-                    print('WHY ARE YOU CHOOSING A JOB THAT IS NOT POSSIBLE? IT SHOULD BE AVOIDED BY THE MASK')
-                done = self.finish
+                    done = True
                 
                 obs = self.observe(self.state)
+            
             if done == True: # If I'm teminating the episode
                 if self.state.job_slot.slot != [None] * self.pa.job_slots: # not all job are assigned
-                    reward -= 5 # malus for terminating the episode without shceduling all jobs.
+                    reward -= 15
                 else:
-                    reward += 5 # bonus for corrcting terminate the episode by assigning all the jobs.
-
+                    reward += 15
         return obs, reward, done, False, info
     
     def reset(self, seed=0, options=None):
@@ -380,14 +360,10 @@ class Environment(gym.Env):
 
         self.state = State(self.jobs, self.machines, self.operators, self.job_slot, self.job_backlog)
 
-        self.no_action = 0
-        self.num_null_slot = 0
-
         self.finish = False
 
         obs = self.observe(self.state)
         self.scheduled_action = {machine:[] for machine in self.machines_code}
-
         return obs, {}
     
     def render(self):
@@ -418,7 +394,7 @@ class Environment(gym.Env):
             workers.append(job.op)
 
         # time_len = max(job_end_time) #is the time needed for completing all the jobs
-        df = pd.DataFrame(list(zip(job_code, job_start_time, job_end_time, macchina, workers)), columns=['ID','START TIME','END TIME', 'MACHINE','OPERATORS'])
+        df = pd.DataFrame(list(zip(job_code, job_start_time, job_end_time, macchina, workers)), columns=['JOB CODE','START TIME','END TIME', 'MACHINE','OPERATORS'])
 
         return(df)
 
@@ -438,7 +414,6 @@ class Environment(gym.Env):
             # decide which is the reward if i decide to not compute action (something negative bcs I want to terminate as soon as possible. But if there no available action, wait is the best option so implement different case)
 
             # Check if the job in the job slots are all not possible, because machine are occupied or operator are not free. In this case give a positive reward. Other wise if an action was possible, give a negative one but not so exagerated, like -5.
-            assert(all (job_code is None for job_code in state.job_slot.slot) == False)
 
             for job_code in state.job_slot.slot:
                 if job_code != None: #  I don't have to do anything in case the job slot is empty
@@ -454,10 +429,10 @@ class Environment(gym.Env):
                             num_op = job.operators[index]
 
                             if sum([state.operators[operator].available for operator in op_code]) >= num_op: 
-                                return -1/2 # There is a possible action to execute but the system has preferred to wait (no good)
+                                return -3 # There is a possible action to execute but the system has preferred to wait (no good)
                             else:
-                                reward = 1/2 # No available action so was good waiting
-                        else: reward = 1/2
+                                reward = 5 # No available action so was good waiting
+                        else: reward = 5
 
 
         # I'M TAKING AN ACTION
@@ -472,33 +447,34 @@ class Environment(gym.Env):
             # I check on which machine I could execute that job
             possible_machine = job.suitable_machine
 
-            index = np.where(job.suitable_machine==machine_code)[0]
-            num_op = job.operators[index]          
 
+            index = np.where(job.suitable_machine==machine_code)[0]
+            num_op = job.operators[index]
             # GIVE NEGATIVE REWARD IF THE ACTION IS NOT POSSIBLE
             # Is the machine one of the possible for that job ? 
             if machine_code not in possible_machine:
-                print('MACHINE NOT POSSIBLE', 'I choose the machine: ', machine.code, 'but the possible machine are: ', possible_machine)
-                reward = -1
+                # print('MACHINE NOT POSSIBLE')
+                reward = -5
 
             # Is the machine available ? 
             elif machine.available == 0:
-                print('machine not available')
-                reward = -1
+                # print('machine not available')
+                reward = -5
             
             # Is the required number of operator available? 
 
             elif sum([state.operators[operator].available for operator in op_code]) < num_op: 
-                print('not enough operator')
-                reward = -1
+                # print('not enough operator')
+                reward = -5
 
             # CALCULATE THE REWARD WHEN I EXECUTE A POSSIBLE ACTION
             else:
-                reward = 1 #bonus for assigning a correct job
+                reward = 3 #bonus for assigning a correct job
+
 
                 time = job.job_time[index]
                 setup_time = self.get_setup_time(job_code, machine_code)
-                time = time + setup_time # the real time I have to take in account is the time of job + the setup time because this is the time in which I have to occupy the machine  
+                time = time + setup_time # the real time I have to take in account is the time of job + the setup time because this is the time in which I have to occupy the machine
 
                 # I calculate the maximum difference between the time scheduled on the chosen machine and the time that I could have had with another one (I want an omogeneous distribution among all the machines so I want that this difference is the minimum possible).
                 #(In this way I'm considering also the machine that can not be available, but the idea is that I want to scheudle in the best way and if next time he try to schedule in the best way but the machine is not available, the alg will obtain a negative reward))
@@ -506,22 +482,14 @@ class Environment(gym.Env):
 
                 # GIVE A POSITIVE REWARD IF IT WAS THE BEST POSSIBLE ACTION (in terms of omogenous scheduling on all the machine)
                 if difference == 0:
-                    reward += 2
+                    reward += 5
                 else:
-                    # print('difference', difference)
-                    reward += -difference/4
+                    reward -= difference
                 
-                reward = float(reward)
                 # give a reward depending on the time that the job could have used on other machine instead of the one choosen
                 diff_time = max([time-(other_time + self.get_setup_time(job_code,mach)) for other_time, mach in zip(job.job_time, possible_machine)]) 
-                if diff_time == 0:
-                    reward += 2
-                else:
-                    reward -= float(diff_time)/4
-                # if diff_time == 0:
-                #     reward += 1
-                # else: 
-                #     reward -= 1
+                reward -= diff_time
+                reward = float(reward)
 
                 # a part of reward will be done taking in account the number of operators implied vs the number of operator required by the other machines that could execute that job.
                 diff_op = max(num_op - other_n_op for other_n_op in job.operators)
@@ -529,13 +497,7 @@ class Environment(gym.Env):
                     reward += 2
                 else:
                     reward -= float(diff_op)/4
-                # if diff_op == 0:
-                #     reward += 1
-                # else: 
-                #     reward -= 1
 
-                assert(type(reward)==float)
-            
         return reward
 
     def _get_next_state(self, old_state, action):
@@ -630,13 +592,12 @@ class Environment(gym.Env):
                         operator.job = None
 
         # Check if the episode is terminated because I have completed all the jobs, and I have more job to assign in the backlog or in the job slot.
-        # print("UPDATE TIME, time pass={}. For checking if the episode is terminated or not we check backlog {} and job slot {}. Il check di job slot è {}".format(pass_time, self.state.job_backlog.curr_size, self.state.job_slot.slot, self.state.job_slot.slot == [None] * self.pa.job_slots ))
+
         if self.state.job_backlog.curr_size == 0 and \
            self.state.job_slot.slot == [None] * self.pa.job_slots:
             self.finish = True
 
     def there_are_possible_act(self):
-        # I'm not using this function now because it didn't workproperly. I have adjusted it but without checking so I'm not sure that now it works good.
         for job_code in self.state.job_slot.slot:
                 if job_code != None: #  I don't have to do anything in case the job slot is empty
                     job = self.state.jobs[job_code]
@@ -652,13 +613,16 @@ class Environment(gym.Env):
 
                             if sum([self.state.operators[operator].available for operator in op_code]) >= num_op: 
                                 return True
-        return False
+                            else:
+                                return False
+                        else: return False
 
     def no_action_step(self):
         '''This function will be used  when the NN choose the no action.
         In case the selected action is the No action the only thing to do is to put the time forward of one time step.
         We check if there are possible action that could have be done instead on wait, if so we will stop the episode because the policy choose an action that is not good.
         '''
+       
         reward = self.get_reward(self.state, 'no action')
 
         self.update_time()
@@ -667,65 +631,28 @@ class Environment(gym.Env):
         info = {}
 
         #check if there were other possible action, in that case stop the alg
-        # if self.there_are_possible_act(): # THIS IS CAN BE USED WHENEVER THE there_are_possible_act function will be adjusted
-        if sum(self.action_masks())>1: # I have available action
-            self.no_action += 1
-            if self.no_action > 5: # after 5 times that the NN choose the no action when others action where possible, I stop the episode
-                reward -= 1 #   malus for terminating the environment with a loop of no action
-                done = True
-            else:
-                done = self.finish
-        else: # this means that I have just one possible action that is the no action (which is always possible)
-            assert(sum(self.action_masks())==1)
+        if self.there_are_possible_act():
+            done = True
+            reward -= 15 # I'm not terminating the episode correctly
+        else: 
             done = self.finish
 
 
         return obs, reward, done, False, info
 
     def no_job_action(self):
-        '''This function will be used  when it is chosen an empty jobslot.'''
+        '''This function will be used  two cases: - The NN choose the no action - it is chosen an empty jobslot.
+        When it choose an empty slot I don't want to consider it as a time step but I want the he tries again to chose
+        another job. So the pass_time input will be False in this case, otherwise it will be True as default. '''
+
 
         obs = self.observe(self.state)
-        reward = -2
+        reward = -15
         info = {}
-        if self.num_null_slot == 10:
-            done = True
-            reward = -0 # malus for not completing the episode correctly
-        else:
-            done = self.finish
+        done = True
 
         return obs, reward, done, False, info
 
-    def action_masks(self):
-        ''' Input: state of the system (self.state)
-            Output: vector of 0 and 1 of same size of job_slot (0 means that I cannot execute the job in that index of the job slot)'''
-
-        mask = [] #posso anche inizializzarla vuota e poi appendere 0 o 1 a seconda
-        # I want to put to 0 the index corresponding to the index in the job_slot of the jobs that have not enough resource to be executed.
-
-        job_mach_act_dict = self.dict_indexNN_JobMach(self.state)
-
-        for job_code, machine_code in job_mach_act_dict.values():
-            if job_code == -9: # empty job slot
-                mask.append(0)
-            else:
-                job = self.state.jobs[job_code]
-                machine = self.state.machines[machine_code]
-                op_code = machine.operators #operator which can work on that machine (it's  a numpy array)
-
-                index = np.where(job.suitable_machine==machine_code)[0]
-                num_op_required = job.operators[index]
-
-                available_op = sum([self.state.operators[operator].available for operator in op_code])
-                
-                if (machine_code not in job.suitable_machine) or (num_op_required > available_op) or (machine.available == 0):
-                    mask.append(0)
-                else:
-                    mask.append(1)
-
-        mask.append(1) # for the 'no action' action (that of course is always possible)
-        assert(len(mask)==self.action_space.n) # The mask size should be the same of the output of the NN (so of the number of action).
-        return mask
 
 # %%
 class State():
@@ -751,7 +678,7 @@ class State():
 # %%
 class Job():
 
-    def __init__(self, job_code, jobcode_machine_op_t, j1_j2_m_setup):
+    def __init__(self, job_code, jobcode_machine_op_t):
         
         self.id = job_code        
         self.ds_code = jobcode_machine_op_t.loc \
@@ -771,13 +698,7 @@ class Job():
         self.job_time = jobcode_machine_op_t.loc\
                                      [jobcode_machine_op_t['JobCode'] == job_code]\
                                      ['Time'].values #np.array. job_time[i] is the time for computing the job on suitable_machine[i]
-        
     
-        self.setup_time = {mach_code: {job_from: setup_time
-                          for job_from, setup_time in zip(j1_j2_m_setup[j1_j2_m_setup['Job_to']==self.id][j1_j2_m_setup['Machine']==mach_code]['Job_from'], j1_j2_m_setup[j1_j2_m_setup['Job_to']==self.id][j1_j2_m_setup['Machine']==mach_code]['SetupTime'])} 
-              for mach_code in self.suitable_machine} # dictionary of dictionary. The first key is the machine and the secondo key is the job from. 
-              # So i have setup = {machine:{job1:setup_time, job2:setup_time, ...}, machine:{...}, ...}
-        
         self.status = -1 #it will be -1 if the job is not executed, 0 if it is being executing, 1 if it is already executed
     
         self.start_time = -1 #this will be the time at which I'm starting evaluating the job
@@ -846,6 +767,7 @@ class Operator():
         self.available = 1 # 1 if it is available, 0 otherwise.
         self.job = None # it will be the code of the job when it will be assigned to a job.
         self.machine = None # it will be the code of the machine when the operator will be assigned to a job.
+
 
 # %%
 class JobSlot:
