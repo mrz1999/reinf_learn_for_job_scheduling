@@ -18,3 +18,7 @@ In the branch there are 3 Environments almost egual. The only difference is in t
 There are 2 different main depending on if using vectorization (for fasting the computation) or not. The main are developped in such a way to testing the Environment eith three algorithms from stable-baseliens3 library: DQN, A2C and PPO.
 
 Finally the other branch is about the multi agent.
+Using this branch is a little bit more difficult, is not sufficient installing a requirements file. You can read the instruction in the file Instruction.md . We try to create a file (setup.sh) that authomatically install all the tools you need, but it is not completed. 
+
+The environment is developed in the file multiagent_env.py. For using he library MARLLIB we need a wrapper of the Environment that in the file env_wrapper.py . 
+For running the algorithm you can use the file train.py.  You can cange the algorithm among 'mappo', 'coma' and 'matrpo' that are the one we tried and secure work. For the ohter algorithms of the library, you should first check if they work. 
